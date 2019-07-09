@@ -8,25 +8,32 @@ from ..util import efficient_btriunpack
 
 from lcp_physics.lcp.util import get_sizes, bdiag
 
+import pdb
 
 shown_btrifact_warning = False
 
 # @profile
-def btrifact_hack(x):
-    global shown_btrifact_warning
-    try:
-        return x.btrifact(pivot=not x.is_cuda)
-    except TypeError:
-        if not shown_btrifact_warning:
-            print("""----------
-lcp warning: Pivoting will always happen and will significantly
-slow down your code. Please use the master branch of PyTorch
-to get a version that disables pivoting on the GPU.
-----------
-""")
-            shown_btrifact_warning = True
-        return x.btrifact()
+# def btrifact_hack(x):
+    # global shown_btrifact_warning
+    # try:
+        # return x.btrifact(pivot=not x.is_cuda)
+    # except TypeError:
+        # if not shown_btrifact_warning:
+            # print("""----------
+# lcp warning: Pivoting will always happen and will significantly
+# slow down your code. Please use the master branch of PyTorch
+# to get a version that disables pivoting on the GPU.
+# ----------
+# """)
+            # shown_btrifact_warning = True
+        # return x.btrifact()
 
+def btrifact_hack(x):
+    data, pivots = x.lu(pivot=not x.is_cuda)
+    if x.is_cuda:
+        assert x.ndimension() == 2
+        pivots = torch.arange(1, x.size(1))
+    return (data, pivots)
 
 INACC_ERR = """
 --------
@@ -329,7 +336,7 @@ def solve_kkt(Q_LU, d, G, A, S_LU, rx, rs, rz, ry):
     #     [ G Q^{-1} A^T        G Q^{-1} G^T + D^{-1} ]
 
     nineq, nz, neq, nBatch = get_sizes(G, A)
-
+    
     invQ_rx = rx.btrisolve(*Q_LU)  # Q-1 rx
     if neq > 0:
         # A Q-1 rx - ry
@@ -340,7 +347,7 @@ def solve_kkt(Q_LU, d, G, A, S_LU, rx, rs, rz, ry):
         h = invQ_rx.unsqueeze(1).bmm(G.transpose(1, 2)).squeeze(1) + rs / d - rz
 
     w = -(h.btrisolve(*S_LU))  # S-1 h =
-
+    
     g1 = -rx - w[:, neq:].unsqueeze(1).bmm(G).squeeze(1)  # -rx - GT w = -rx -GT S-1 h
     if neq > 0:
         g1 -= w[:, :neq].unsqueeze(1).bmm(A).squeeze(1)  # - AT w = -AT S-1 h
@@ -366,7 +373,6 @@ lcp Error: Cannot perform LU factorization on Q.
 Please make sure that your Q matrix is PSD and has
 a non-zero diagonal.
 """)
-
     # S = [ A Q^{-1} A^T        A Q^{-1} G^T          ]
     #     [ G Q^{-1} A^T        G Q^{-1} G^T + D^{-1} ]
     #
@@ -374,11 +380,12 @@ a non-zero diagonal.
     # that can be completed once D^{-1} is known.
     # See the 'Block LU factorization' part of our website
     # for more details.
-
+    
     G_invQ_GT = torch.bmm(G, G.transpose(1, 2).btrisolve(*Q_LU)) + F
     R = G_invQ_GT.clone()
     S_LU_pivots = torch.IntTensor(range(1, 1 + neq + nineq)).unsqueeze(0) \
         .repeat(nBatch, 1).type_as(Q).int()
+    
     if neq > 0:
         invQ_AT = A.transpose(1, 2).btrisolve(*Q_LU)
         A_invQ_AT = torch.bmm(A, invQ_AT)
