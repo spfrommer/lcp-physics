@@ -22,7 +22,11 @@ class TestNet(nn.Module):
     def __init__(self):
         super(TestNet, self).__init__()
         self.lcp_solver = LCPFunction()
-        self.mass = torch.nn.Parameter(torch.tensor([1.5]))
+        # If mass starts over 2, fails to converge, 0<x<2 is good
+        self.mass = torch.nn.Parameter(torch.tensor([2.1]))
+        # Mu needs to be < 5 to converge (assuming mass fixed)
+        self.mu = torch.nn.Parameter(torch.tensor([1.0]))
+        self.mu.requires_grad = False
 
     def forward(self, prev_vels):
         next_vels = torch.zeros_like(prev_vels)
@@ -37,8 +41,9 @@ class TestNet(nn.Module):
         vk = vk.unsqueeze(1).unsqueeze(0)
         
         mass = self.mass
+        mu = self.mu
+
         g = torch.tensor([0.0, -1])
-        mu = 1.0
         mg = (mass * g).unsqueeze(1).unsqueeze(0)
         u = torch.tensor([2.0, 0]).unsqueeze(1).unsqueeze(0) 
 
@@ -53,7 +58,13 @@ class TestNet(nn.Module):
         F = torch.tensor([[0.0, 0, 0, 0],
                           [0, 0, 0, 1],
                           [0, 0, 0, 1],
-                          [mu, -1, -1, 0]]).unsqueeze(0) 
+                          [0, -1, -1, 0]]) + \
+            mu * torch.tensor([[0.0, 0, 0, 0],
+                               [0, 0, 0, 0],
+                               [0, 0, 0, 0],
+                               [1, 0, 0, 0]])
+        F = F.unsqueeze(0)
+
         A = torch.tensor([])
         # This is the h argument
         m = torch.zeros(4).unsqueeze(0)
@@ -66,20 +77,21 @@ net = TestNet()
 
 # prev_vels = torch.tensor([[1.0, 0],
                           # [0, 0],
-                          # [-1, 0]])
+                          # [-1, 0],
+                          # [-4, 0]])
 # next_vels = torch.tensor([[2.0, 0],
                           # [1, 0],
-                          # [0, 0]])
-# prev_vels = torch.tensor([[-4.0, 0],
-                          # [1.0, 0]])
-# next_vels = torch.tensor([[-1.0, 0],
-                          # [2.0, 0]])
-prev_vels = torch.tensor([[1.0, 0]])
-next_vels = torch.tensor([[2.0, 0]])
-
+                          # [0, 0],
+                          # [-1, 0]])
+prev_vels = torch.tensor([[-3.0, 0],
+                          [3.0, 0]])
+next_vels = torch.tensor([[0.0, 0],
+                          [4.0, 0]])
+# prev_vels = torch.tensor([[1.0, 0]])
+# next_vels = torch.tensor([[2.0, 0]])
 
 loss_func = torch.nn.MSELoss()
-optimizer = torch.optim.Adam(net.parameters(), lr=0.01)
+optimizer = torch.optim.Adam(net.parameters(), lr=0.5)
 
 for epoch in range(500):
     # Zero the gradients
@@ -89,15 +101,17 @@ for epoch in range(500):
     #print(pred_vels)
 
     loss = loss_func(pred_vels, next_vels)
-    print('epoch: ', epoch,' loss: ', loss.item(), ' mass: ', net.mass.item())
+    print('epoch: ', epoch,' loss: ', loss.item(), ' mass: ', net.mass.item(), ' mu: ', net.mu.item())
+    # print('epoch: ', epoch,' loss: ', loss.item(), ' mu: ', net.mu.item())
     
     # perform a backward pass (backpropagation)
     loss.backward()
     
     # Update the parameters
-    optimizer.step()
-    # for p in net.parameters():
-        # p.data.add_(0.5, p.grad.data)
+    # optimizer.step()
+    for p in net.parameters():
+        if p.requires_grad:
+            p.data.add_(0.1, -p.grad.data)
     
     # Needed to recreate the backwards graph
     # TODO: fix this properly
