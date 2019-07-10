@@ -18,15 +18,48 @@ def getBack(var_grad_fn):
             except AttributeError as e:
                 getBack(n[0])
 
+# prev_vels = torch.tensor([[1.0, 0],
+                          # [0, 0],
+                          # [-1, 0],
+                          # [-4, 0]])
+# next_vels = torch.tensor([[2.0, 0],
+                          # [1, 0],
+                          # [0, 0],
+                          # [-1, 0]])
+# prev_vels = torch.tensor([[-1.0, 0],
+                          # [-0.5, 0],
+                          # [0.5, 0],
+                          # [1.0, 0]])
+# next_vels = torch.tensor([[0.0, 0],
+                          # [0.0, 0],
+                          # [0.0, 0],
+                          # [0.0, 0]])
+prev_vels = torch.tensor([[1.0, 0],
+                          [2.0, 0],
+                          [3.0, 0],
+                          [4.0, 0],
+                          [5.0, 0],
+                          [-6.0, 0],
+                          [-5.0, 0],
+                          [-4.0, 0]])
+next_vels = torch.tensor([[2.0, 0],
+                          [3.0, 0],
+                          [4.0, 0],
+                          [5.0, 0],
+                          [6.0, 0],
+                          [-3.0, 0],
+                          [-2.0, 0],
+                          [-1.0, 0]])
+
 class TestNet(nn.Module):
     def __init__(self):
         super(TestNet, self).__init__()
         self.lcp_solver = LCPFunction()
         # If mass starts over 2, fails to converge, 0<x<2 is good
-        self.mass = torch.nn.Parameter(torch.tensor([2.1]))
+        self.mass = torch.nn.Parameter(torch.tensor([1.0]))
+        self.mass.requires_grad = False
         # Mu needs to be < 5 to converge (assuming mass fixed)
-        self.mu = torch.nn.Parameter(torch.tensor([1.0]))
-        self.mu.requires_grad = False
+        self.mu = torch.nn.Parameter(torch.tensor([1.3]))
 
     def forward(self, prev_vels):
         next_vels = torch.zeros_like(prev_vels)
@@ -74,21 +107,6 @@ class TestNet(nn.Module):
         return M, q, G, m, A, b, F
 
 net = TestNet()
-
-# prev_vels = torch.tensor([[1.0, 0],
-                          # [0, 0],
-                          # [-1, 0],
-                          # [-4, 0]])
-# next_vels = torch.tensor([[2.0, 0],
-                          # [1, 0],
-                          # [0, 0],
-                          # [-1, 0]])
-prev_vels = torch.tensor([[-3.0, 0],
-                          [3.0, 0]])
-next_vels = torch.tensor([[0.0, 0],
-                          [4.0, 0]])
-# prev_vels = torch.tensor([[1.0, 0]])
-# next_vels = torch.tensor([[2.0, 0]])
 
 loss_func = torch.nn.MSELoss()
 optimizer = torch.optim.Adam(net.parameters(), lr=0.5)
