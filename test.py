@@ -22,76 +22,45 @@ class TestNet(nn.Module):
     def __init__(self):
         super(TestNet, self).__init__()
         self.lcp_solver = LCPFunction()
-        self.mass = torch.nn.Parameter(torch.tensor([5.0]))
+        self.mass = torch.nn.Parameter(torch.tensor([1.5]))
 
     def forward(self, prev_vels):
+        next_vels = torch.zeros_like(prev_vels)
         for i, prev_vel in enumerate(prev_vels):
-            vk = prev_vels[i]
-            vk = vk.unsqueeze(1).unsqueeze(0)
-            
-            mass = self.mass
-            g = torch.tensor([0.0, -1])
-            mu = 1.0
-            mg = (mass * g).unsqueeze(1).unsqueeze(0)
-            u = torch.tensor([2.0, 0]).unsqueeze(1).unsqueeze(0) 
+            prev_vel = prev_vels[i]
+            M, q, G, m, A, b, F = self.make_matrices(prev_vel)
+            next_vels[i, :] = self.lcp_solver(M, q, G, m, A, b, F)
 
-            M = (mass * torch.eye(2)).unsqueeze(0)
-            # This is the p argument
-            q = (torch.bmm(-M, vk) - mg - u).squeeze(2)
-
-            G = torch.tensor([[0.0, -1],
-                              [1, 0],
-                              [-1, 0],
-                              [0, 0]]).unsqueeze(0) 
-            F = torch.tensor([[0.0, 0, 0, 0],
-                              [0, 0, 0, 1],
-                              [0, 0, 0, 1],
-                              [mu, -1, -1, 0]]).unsqueeze(0) 
-            A = torch.tensor([])
-            # This is the h argument
-            m = torch.zeros(4).unsqueeze(0)
-
-            b = torch.tensor([])
-
-            return self.lcp_solver(M, q, G, m, A, b, F)
-
-    # def forward(self, prev_vels):
-        # next_vels = torch.zeros_like(prev_vels)
-        # for i, prev_vel in enumerate(prev_vels):
-            # prev_vel = prev_vels[i]
-            # M, q, G, m, A, b, F = self.make_matrices(prev_vel)
-            # next_vels[i, :] = self.lcp_solver(M, q, G, m, A, b, F)
-
-        # return next_vels
+        return next_vels
     
-    # def make_matrices(self, vk):
-        # vk = vk.unsqueeze(1).unsqueeze(0)
+    def make_matrices(self, vk):
+        vk = vk.unsqueeze(1).unsqueeze(0)
         
-        # mass = self.mass
-        # g = torch.tensor([0.0, -1])
-        # mu = 1.0
-        # mg = (mass * g).unsqueeze(1).unsqueeze(0)
-        # u = torch.tensor([2.0, 0]).unsqueeze(1).unsqueeze(0) 
+        mass = self.mass
+        g = torch.tensor([0.0, -1])
+        mu = 1.0
+        mg = (mass * g).unsqueeze(1).unsqueeze(0)
+        u = torch.tensor([2.0, 0]).unsqueeze(1).unsqueeze(0) 
 
-        # M = (mass * torch.eye(2)).unsqueeze(0)
-        # # This is the p argument
-        # q = (torch.bmm(-M, vk) - mg - u).squeeze(2)
+        M = (mass * torch.eye(2)).unsqueeze(0)
+        # This is the p argument
+        q = (torch.bmm(-M, vk) - mg - u).squeeze(2)
 
-        # G = torch.tensor([[0.0, -1],
-                          # [1, 0],
-                          # [-1, 0],
-                          # [0, 0]]).unsqueeze(0) 
-        # F = torch.tensor([[0.0, 0, 0, 0],
-                          # [0, 0, 0, 1],
-                          # [0, 0, 0, 1],
-                          # [mu, -1, -1, 0]]).unsqueeze(0) 
-        # A = torch.tensor([])
-        # # This is the h argument
-        # m = torch.zeros(4).unsqueeze(0)
+        G = torch.tensor([[0.0, -1],
+                          [1, 0],
+                          [-1, 0],
+                          [0, 0]]).unsqueeze(0) 
+        F = torch.tensor([[0.0, 0, 0, 0],
+                          [0, 0, 0, 1],
+                          [0, 0, 0, 1],
+                          [mu, -1, -1, 0]]).unsqueeze(0) 
+        A = torch.tensor([])
+        # This is the h argument
+        m = torch.zeros(4).unsqueeze(0)
 
-        # b = torch.tensor([])
+        b = torch.tensor([])
 
-        # return M, q, G, m, A, b, F
+        return M, q, G, m, A, b, F
 
 net = TestNet()
 
@@ -101,13 +70,16 @@ net = TestNet()
 # next_vels = torch.tensor([[2.0, 0],
                           # [1, 0],
                           # [0, 0]])
+# prev_vels = torch.tensor([[-4.0, 0],
+                          # [1.0, 0]])
+# next_vels = torch.tensor([[-1.0, 0],
+                          # [2.0, 0]])
 prev_vels = torch.tensor([[1.0, 0]])
 next_vels = torch.tensor([[2.0, 0]])
 
 
 loss_func = torch.nn.MSELoss()
-optimizer = torch.optim.Adam(net.parameters(), lr=0.001)
-#optimizer = torch.optim.SGD(net.parameters(), lr=0.001)
+optimizer = torch.optim.Adam(net.parameters(), lr=0.01)
 
 for epoch in range(500):
     # Zero the gradients
@@ -123,9 +95,10 @@ for epoch in range(500):
     loss.backward()
     
     # Update the parameters
-    #optimizer.step()
-    for p in net.parameters():
-        p.data.add_(0.5, p.grad.data)
-
-    net.mass = torch.nn.Parameter(net.mass.clone().detach())
+    optimizer.step()
+    # for p in net.parameters():
+        # p.data.add_(0.5, p.grad.data)
+    
+    # Needed to recreate the backwards graph
+    # TODO: fix this properly
     net.lcp_solver = LCPFunction()
