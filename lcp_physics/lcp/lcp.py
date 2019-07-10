@@ -4,6 +4,7 @@ from torch.autograd import Function
 from .solvers import pdipm
 from .util import bger, extract_batch_size
 
+import pdb
 
 class LCPFunction(Function):
     """A differentiable LCP solver, uses the primal dual interior point method
@@ -30,7 +31,7 @@ class LCPFunction(Function):
             Q, p, G, h, A, b, F, self.Q_LU, self.S_LU, self.R,
             eps=self.eps, max_iter=self.max_iter, verbose=self.verbose,
             not_improved_lim=self.not_improved_lim)
-
+        
         self.save_for_backward(zhats, Q, p, G, h, A, b, F)
         return zhats
 
@@ -126,9 +127,11 @@ class LCPFunction(Function):
                 for i in range(flat_tensor.nelement()):
                     orig = flat_tensor[i]
                     flat_tensor[i] = orig - eps
-                    outa.copy_(fn(*inputs), broadcast=False)
+                    #outa.copy_(fn(*inputs), broadcast=False)
+                    outa.copy_(fn(*inputs))
                     flat_tensor[i] = orig + eps
-                    outb.copy_(fn(*inputs), broadcast=False)
+                    #outb.copy_(fn(*inputs), broadcast=False)
+                    outb.copy_(fn(*inputs))
                     flat_tensor[i] = orig
 
                     outb.add_(-1, outa).div_(2 * eps)

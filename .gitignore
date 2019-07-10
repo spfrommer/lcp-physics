@@ -11,6 +11,7 @@ experimental
 *.png
 *.bmp
 *.lprof
+*.swp
 .DS_Store
 .idea
 .cache
